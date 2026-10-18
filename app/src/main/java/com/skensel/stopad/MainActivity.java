@@ -2,6 +2,10 @@ package com.skensel.stopad;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.text.InputType;
 import android.content.*;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -14,7 +18,7 @@ import java.util.*;
 public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView status, counters;
-    private Button toggle;
+    private Button toggle, manualButton, exceptionsButton;
     private final List<CheckBox> choices = new ArrayList<>();
     private final Runnable refresh = new Runnable() {
         @Override public void run() { update(); handler.postDelayed(this, 1000); }
@@ -74,6 +78,14 @@ public final class MainActivity extends Activity {
             });
             choices.add(box); layout.addView(box);
         }
+        manualButton = new Button(this);
+        manualButton.setText(R.string.add_game);
+        manualButton.setOnClickListener(v -> showGamePicker());
+        layout.addView(manualButton);
+        exceptionsButton = new Button(this);
+        exceptionsButton.setText(getString(R.string.exceptions_count, prefs.getStringSet("domain_exceptions", Collections.emptySet()).size()));
+        exceptionsButton.setOnClickListener(v -> showExceptions());
+        layout.addView(exceptionsButton);
         text(layout, R.string.limitations, 14);
         text(layout, R.string.privacy, 14);
         update();
@@ -92,11 +104,76 @@ public final class MainActivity extends Activity {
     private void update() {
         if (status == null) return;
         boolean active = AdVpnService.active();
-        status.setText(active ? getString(R.string.on) : (AdVpnService.message.isEmpty() ? getString(R.string.off) : AdVpnService.message));
+        status.setText(active ? getString(AdVpnService.online() ? R.string.on : R.string.waiting_network) : (AdVpnService.message.isEmpty() ? getString(R.string.off) : AdVpnService.message));
         counters.setText(active ? getString(R.string.stats, AdVpnService.blocked(), AdVpnService.forwarded(), AdVpnService.failed()) : getString(R.string.session_empty));
         toggle.setText(active ? R.string.stop : R.string.start);
         toggle.setEnabled(active || !GameCatalog.selected(this).isEmpty());
+        if (manualButton != null) manualButton.setEnabled(!active);
+        if (exceptionsButton != null) exceptionsButton.setEnabled(!active);
         for (CheckBox box : choices) box.setEnabled(!active);
+    }
+    private void showGamePicker() {
+        if (AdVpnService.active()) return;
+        Set<String> known = new HashSet<>();
+        for (ApplicationInfo app : GameCatalog.load(this)) known.add(app.packageName);
+        List<ApplicationInfo> available = new ArrayList<>();
+        for (ApplicationInfo app : GameCatalog.candidates(this)) if (!known.contains(app.packageName)) available.add(app);
+        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        EditText search = new EditText(this); search.setHint(R.string.search_games);
+        content.addView(search);
+        ListView list = new ListView(this);
+        content.addView(list, new LinearLayout.LayoutParams(-1, (int) (300 * getResources().getDisplayMetrics().density)));
+        TextView empty = new TextView(this); empty.setText(R.string.no_candidates); content.addView(empty); list.setEmptyView(empty);
+        List<ApplicationInfo> filtered = new ArrayList<>(available);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
+        list.setAdapter(adapter);
+        Runnable filter = () -> {
+            filtered.clear(); adapter.clear();
+            String term = search.getText().toString().toLowerCase(Locale.ROOT);
+            for (ApplicationInfo app : available) {
+                String title = getString(R.string.game_label, app.loadLabel(getPackageManager()), app.packageName);
+                if (title.toLowerCase(Locale.ROOT).contains(term)) { filtered.add(app); adapter.add(title); }
+            }
+            adapter.notifyDataSetChanged();
+        };
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filter.run(); }
+            @Override public void afterTextChanged(Editable e) { }
+        });
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(R.string.add_game)
+                .setView(content).setNegativeButton(android.R.string.cancel, null).create();
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            if (AdVpnService.active()) return;
+            String name = filtered.get(position).packageName;
+            var prefs = getSharedPreferences("games", MODE_PRIVATE);
+            Set<String> manual = new HashSet<>(prefs.getStringSet("manual", Collections.emptySet()));
+            Set<String> selected = new HashSet<>(prefs.getStringSet("selected", Collections.emptySet()));
+            manual.add(name); selected.add(name);
+            prefs.edit().putStringSet("manual", manual).putStringSet("selected", selected).apply();
+            dialog.dismiss(); render();
+        });
+        filter.run(); dialog.show();
+    }
+    private void showExceptions() {
+        if (AdVpnService.active()) return;
+        var prefs = getSharedPreferences("games", MODE_PRIVATE);
+        EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setMinLines(4); input.setMaxLines(10);
+        input.setText(String.join("\n", new TreeSet<>(prefs.getStringSet("domain_exceptions", Collections.emptySet()))));
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(R.string.exceptions_title)
+                .setMessage(R.string.exceptions_hint).setView(input)
+                .setNegativeButton(android.R.string.cancel, null).setPositiveButton(R.string.save, null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            if (AdVpnService.active()) return;
+            try {
+                Set<String> domains = DomainPolicy.parseExceptions(input.getText().toString());
+                prefs.edit().putStringSet("domain_exceptions", domains).apply();
+                dialog.dismiss(); render();
+            } catch (IllegalArgumentException invalid) { input.setError(getString(R.string.invalid_domains)); }
+        }));
+        dialog.show();
     }
     private TextView text(LinearLayout layout, int resource, int size) {
         TextView view = new TextView(this);

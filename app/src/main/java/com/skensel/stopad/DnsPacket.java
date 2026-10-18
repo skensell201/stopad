@@ -51,6 +51,15 @@ final class DnsPacket {
         }
         return null;
     }
+    int udpLimit() {
+        // Queries with no EDNS advertise the original DNS limit of 512 bytes.
+        // Only a single root-name OPT immediately after the question is recognized.
+        if (u16(query, 10) == 1 && query.length >= questionEnd + 11 && query[questionEnd] == 0
+                && u16(query, questionEnd + 1) == 41
+                && questionEnd + 11 + u16(query, questionEnd + 9) == query.length)
+            return Math.max(512, u16(query, questionEnd + 3));
+        return 512;
+    }
     byte[] error(int rcode) {
         byte[] result = Arrays.copyOf(query, questionEnd);
         result[2] = (byte) (0x80 | (query[2] & 1)); // QR, original RD; no AA/TC/AD.

@@ -2,6 +2,11 @@ package com.skensel.stopad;
 import android.app.*;
 import android.content.*;
 import android.net.VpnService;
+import android.net.Network;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import android.os.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -9,20 +14,27 @@ import java.util.concurrent.*;
 /** Run only with the isolated emulator probes installed. No production backdoor or exported test API. */
 public final class VpnIntegration extends Instrumentation {
     private Context context;
-    private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser";
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
+    private boolean networkTests;
+    private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser", manualGame = "com.skensel.stopad.probe.manual";
+    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
     @Override public void onStart() {
         Bundle result = new Bundle();
         Set<String> original = Collections.emptySet();
+        Set<String> oldManual = Collections.emptySet(), oldExceptions = Collections.emptySet();
         boolean ok = false;
         try {
             context = getTargetContext();
             original = new HashSet<>(context.getSharedPreferences("games", 0).getStringSet("selected", Collections.emptySet()));
+            oldManual = new HashSet<>(context.getSharedPreferences("games", 0).getStringSet("manual", Collections.emptySet()));
+            oldExceptions = new HashSet<>(context.getSharedPreferences("games", 0).getStringSet("domain_exceptions", Collections.emptySet()));
+            context.getSharedPreferences("games", 0).edit().remove("manual").remove("domain_exceptions").commit();
             require(!AdVpnService.active(), "Start test with VPN off");
             startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
             require(VpnService.prepare(context) == null, "Grant emulator VPN app-op before test");
             require(GameCatalog.load(context).stream().anyMatch(a -> a.packageName.equals(game)), "Game visible");
             require(GameCatalog.load(context).stream().noneMatch(a -> a.packageName.equals(browser)), "Misclassified browser excluded");
+            require(GameCatalog.candidates(context).stream().anyMatch(a -> a.packageName.equals(manualGame)), "Uncategorized game candidate visible");
+            require(GameCatalog.load(context).stream().noneMatch(a -> a.packageName.equals(manualGame)), "Uncategorized app not automatically classified as game");
             Bundle baseline = probe(game);
             require(baseline.getBoolean("adResolves") && baseline.getBoolean("normalResolves") && baseline.getBoolean("directTcp"), "Baseline network: " + baseline);
             select(Set.of(browser));
@@ -43,9 +55,19 @@ public final class VpnIntegration extends Instrumentation {
             // disconnect changes the network and should restore the physical resolver.
             Bundle restored = probe(game);
             require(restored.getBoolean("adResolves") && restored.getBoolean("normalResolves"), "Network restored: " + restored);
+            context.getSharedPreferences("games", 0).edit().putStringSet("domain_exceptions", Set.of("doubleclick.net")).commit();
             launchVpn(); awaitActive(true);
+            Bundle exception = probe(game);
+            require(exception.getBoolean("adResolves") && exception.getBoolean("normalResolves"), "Exception overrides block: " + exception);
             context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP)); awaitActive(false);
-            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward, direct TCP, stop/restore, restart");
+            context.getSharedPreferences("games", 0).edit().remove("domain_exceptions").putStringSet("manual", Set.of(manualGame, browser)).commit();
+            require(GameCatalog.load(context).stream().noneMatch(a -> a.packageName.equals(browser)), "Manual browser still excluded");
+            select(Set.of(manualGame)); launchVpn(); awaitActive(true);
+            Bundle manual = probe(manualGame);
+            require(!manual.getBoolean("adResolves") && manual.getBoolean("normalResolves"), "Manually added game filtered: " + manual);
+            if (networkTests) networkTransitions();
+            context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP)); awaitActive(false);
+            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward, direct TCP, stop/restore, exceptions, manual game, restart" + (networkTests ? ", Wi-Fi/mobile transitions, Private DNS stop" : ""));
             ok = true;
         } catch (Throwable failure) {
             result.putString("stream", "FAIL: " + failure);
@@ -54,9 +76,64 @@ public final class VpnIntegration extends Instrumentation {
             if (context != null) {
                 context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP));
                 select(original);
+                context.getSharedPreferences("games", 0).edit().putStringSet("manual", oldManual).putStringSet("domain_exceptions", oldExceptions).commit();
             }
         }
         finish(ok ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void networkTransitions() throws Exception {
+        String wifi = shell("settings get global wifi_on").trim();
+        String dnsMode = shell("settings get global private_dns_mode").trim();
+        String dnsName = shell("settings get global private_dns_specifier").trim();
+        try {
+            // Only used by --network on a disposable emulator; caller explicitly selects an emulator serial.
+            shell("settings put global private_dns_mode off");
+            shell("svc wifi enable");
+            awaitTransport(NetworkCapabilities.TRANSPORT_WIFI);
+            if (!AdVpnService.active()) { launchVpn(); awaitActive(true); }
+            shell("svc wifi disable");
+            awaitTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+            Bundle cellular = probe(manualGame);
+            require(!cellular.getBoolean("adResolves") && cellular.getBoolean("normalResolves") && cellular.getBoolean("directTcp"), "Mobile transition: " + cellular);
+            shell("svc wifi enable");
+            awaitTransport(NetworkCapabilities.TRANSPORT_WIFI);
+            Bundle wifiResult = probe(manualGame);
+            require(!wifiResult.getBoolean("adResolves") && wifiResult.getBoolean("normalResolves") && wifiResult.getBoolean("directTcp"), "Wi-Fi return: " + wifiResult);
+            shell("settings put global private_dns_specifier dns.google");
+            shell("settings put global private_dns_mode hostname");
+            long deadline = System.currentTimeMillis() + 20000;
+            while (AdVpnService.active() && System.currentTimeMillis() < deadline) Thread.sleep(100);
+            require(!AdVpnService.active() && AdVpnService.message.contains("Private DNS"), "Stop when Private DNS enabled: " + AdVpnService.message);
+        } finally {
+            restoreSetting("private_dns_specifier", dnsName);
+            restoreSetting("private_dns_mode", dnsMode);
+            shell("svc wifi " + ("1".equals(wifi) ? "enable" : "disable"));
+        }
+    }
+    private void awaitTransport(int transport) throws Exception {
+        ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
+        long deadline = System.currentTimeMillis() + 25000;
+        while (System.currentTimeMillis() < deadline) {
+            AdVpnService.Session session = AdVpnService.current;
+            NetworkCapabilities caps = session == null ? null : cm.getNetworkCapabilities(session.network);
+            if (caps != null && caps.hasTransport(transport) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) return;
+            Thread.sleep(100);
+        }
+        throw new AssertionError("Default transport did not change: " + transport + ": " + AdVpnService.message);
+    }
+    private String shell(String command) throws Exception {
+        try (InputStream input = new ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand(command))) {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[1024];
+            for (int count; (count = input.read(buffer)) != -1;) bytes.write(buffer, 0, count);
+            return bytes.toString(StandardCharsets.UTF_8.name());
+        }
+    }
+    private void restoreSetting(String name, String value) throws Exception {
+        // Values come from Android settings; accept only the known alphabet before constructing a shell command.
+        if (value.equals("null") || value.isEmpty()) shell("settings delete global " + name);
+        else if (value.matches("[a-zA-Z0-9._-]+")) shell("settings put global " + name + " " + value);
+        else throw new IllegalArgumentException("Unexpected test setting value");
     }
     private void select(Set<String> packages) { context.getSharedPreferences("games", 0).edit().putStringSet("selected", new HashSet<>(packages)).commit(); }
     private void launchVpn() {
@@ -78,8 +155,8 @@ public final class VpnIntegration extends Instrumentation {
         receiver.writeToParcel(parcel, 0); parcel.setDataPosition(0);
         ResultReceiver remote = ResultReceiver.CREATOR.createFromParcel(parcel); parcel.recycle();
         context.startActivity(new Intent().setClassName(packageName, "com.skensel.stopad.probe.ProbeActivity")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("receiver", remote));
-        require(done.await(25, TimeUnit.SECONDS), "Probe timeout: " + packageName);
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("receiver", remote).putExtra("expectVpn", AdVpnService.active() && GameCatalog.selected(context).contains(packageName)));
+        require(done.await(45, TimeUnit.SECONDS), "Probe timeout: " + packageName);
         return result[0];
     }
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
