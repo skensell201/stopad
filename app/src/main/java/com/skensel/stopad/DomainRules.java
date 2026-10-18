@@ -5,10 +5,14 @@ import java.util.*;
 
 /** Exact domains and their subdomains; never substring matching. */
 public final class DomainRules {
-    private final Set<String> blocked = new HashSet<>();
+    private final Set<String> blocked;
     public DomainRules(Collection<String> domains) {
+        blocked = new HashSet<>();
         for (String domain : domains) blocked.add(normalize(domain));
     }
+    private DomainRules(Set<String> validated) { blocked = validated; }
+    /** Only HostsBlocklist's validated immutable set may use this path. */
+    static DomainRules validated(Set<String> domains) { return new DomainRules(domains); }
     public boolean blocks(String domain) {
         String candidate = normalize(domain);
         while (!candidate.isEmpty()) {

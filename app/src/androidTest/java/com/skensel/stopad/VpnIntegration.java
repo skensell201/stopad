@@ -14,10 +14,11 @@ import java.util.concurrent.*;
 /** Run only with the isolated emulator probes installed. No production backdoor or exported test API. */
 public final class VpnIntegration extends Instrumentation {
     private Context context;
-    private boolean networkTests;
+    private boolean networkTests, listTests;
     private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser", manualGame = "com.skensel.stopad.probe.manual";
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
+    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
     @Override public void onStart() {
+        if (listTests) { new ListIntegration(this).run(); return; }
         Bundle result = new Bundle();
         Set<String> original = Collections.emptySet();
         Set<String> oldManual = Collections.emptySet(), oldExceptions = Collections.emptySet();
@@ -30,13 +31,16 @@ public final class VpnIntegration extends Instrumentation {
             context.getSharedPreferences("games", 0).edit().remove("manual").remove("domain_exceptions").commit();
             require(!AdVpnService.active(), "Start test with VPN off");
             startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+            long listDeadline = SystemClock.elapsedRealtime() + 30000;
+            while (BlocklistRepository.snapshot == null && BlocklistRepository.busy && SystemClock.elapsedRealtime() < listDeadline) Thread.sleep(50);
+            require(BlocklistRepository.snapshot != null, "List ready: " + BlocklistRepository.message);
             require(VpnService.prepare(context) == null, "Grant emulator VPN app-op before test");
             require(GameCatalog.load(context).stream().anyMatch(a -> a.packageName.equals(game)), "Game visible");
             require(GameCatalog.load(context).stream().noneMatch(a -> a.packageName.equals(browser)), "Misclassified browser excluded");
             require(GameCatalog.candidates(context).stream().anyMatch(a -> a.packageName.equals(manualGame)), "Uncategorized game candidate visible");
             require(GameCatalog.load(context).stream().noneMatch(a -> a.packageName.equals(manualGame)), "Uncategorized app not automatically classified as game");
             Bundle baseline = probe(game);
-            require(baseline.getBoolean("adResolves") && baseline.getBoolean("normalResolves") && baseline.getBoolean("directTcp"), "Baseline network: " + baseline);
+            require(baseline.getBoolean("expandedResolves") && baseline.getBoolean("adResolves") && baseline.getBoolean("normalResolves") && baseline.getBoolean("directTcp"), "Baseline network: " + baseline);
             select(Set.of(browser));
             require(GameCatalog.selected(context).isEmpty(), "Browser-only selection rejected");
             launchVpn(); Thread.sleep(1000);
@@ -45,9 +49,9 @@ public final class VpnIntegration extends Instrumentation {
             awaitActive(true);
             Bundle filtered = probe(game);
             android.util.Log.i("StopAdTest", "filtered=" + filtered + " blocked=" + AdVpnService.blocked() + " forwarded=" + AdVpnService.forwarded() + " failed=" + AdVpnService.failed());
-            require(!filtered.getBoolean("adResolves") && filtered.getBoolean("normalResolves") && filtered.getBoolean("directTcp"), "Selected game: " + filtered);
+            require(!filtered.getBoolean("expandedResolves") && !filtered.getBoolean("adResolves") && filtered.getBoolean("normalResolves") && filtered.getBoolean("directTcp"), "Selected game: " + filtered);
             Bundle bypass = probe(browser);
-            require(bypass.getBoolean("adResolves") && bypass.getBoolean("normalResolves") && bypass.getBoolean("directTcp"), "Browser bypass: " + bypass);
+            require(bypass.getBoolean("expandedResolves") && bypass.getBoolean("adResolves") && bypass.getBoolean("normalResolves") && bypass.getBoolean("directTcp"), "Browser bypass: " + bypass);
             require(AdVpnService.blocked() > 0 && AdVpnService.forwarded() > 0, "Real packet counters");
             result.putString("counters", "blocked=" + AdVpnService.blocked() + ", forwarded=" + AdVpnService.forwarded() + ", failed=" + AdVpnService.failed());
             context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP)); awaitActive(false);
@@ -67,7 +71,7 @@ public final class VpnIntegration extends Instrumentation {
             require(!manual.getBoolean("adResolves") && manual.getBoolean("normalResolves"), "Manually added game filtered: " + manual);
             if (networkTests) networkTransitions();
             context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP)); awaitActive(false);
-            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward, direct TCP, stop/restore, exceptions, manual game, restart" + (networkTests ? ", Wi-Fi/mobile transitions, Private DNS stop" : ""));
+            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward including expanded list, direct TCP, stop/restore, exceptions, manual game, restart" + (networkTests ? ", Wi-Fi/mobile transitions, Private DNS stop" : ""));
             ok = true;
         } catch (Throwable failure) {
             result.putString("stream", "FAIL: " + failure);

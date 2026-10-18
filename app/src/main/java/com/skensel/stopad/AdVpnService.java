@@ -47,16 +47,13 @@ public final class AdVpnService extends VpnService {
             var link = cm.getLinkProperties(network);
             if (Build.VERSION.SDK_INT >= 28 && link != null && link.isPrivateDnsActive())
                 throw new IOException("Для DNS-прототипа выключите Private DNS в настройках Android");
-            DomainPolicy rules;
-            try (var reader = new BufferedReader(new InputStreamReader(getAssets().open("blocked-domains.txt"), StandardCharsets.UTF_8))) {
-                List<String> lines = new ArrayList<>();
-                for (String line; (line = reader.readLine()) != null;) {
-                    line = line.trim(); if (!line.isEmpty() && !line.startsWith("#")) lines.add(line);
-                }
-                if (lines.isEmpty()) throw new IOException("Список доменов пуст");
-                rules = new DomainPolicy(lines, getSharedPreferences("games", MODE_PRIVATE)
-                        .getStringSet("domain_exceptions", Collections.emptySet()));
+            BlocklistSnapshot list = BlocklistRepository.snapshot;
+            if (list == null) {
+                BlocklistRepository.initialize(this);
+                throw new IOException("Список блокировки загружается. Повторите включение через несколько секунд");
             }
+            DomainPolicy rules = new DomainPolicy(list.rules, BlocklistRepository.seed(this),
+                    getSharedPreferences("games", MODE_PRIVATE).getStringSet("domain_exceptions", Collections.emptySet()));
             Builder builder = new Builder().setSession("StopAd • игры")
                     .addAddress("10.111.0.1", 32).addDnsServer("10.111.0.2")
                     .addRoute("10.111.0.2", 32).allowFamily(OsConstants.AF_INET6)
@@ -66,7 +63,7 @@ public final class AdVpnService extends VpnService {
             ParcelFileDescriptor tunnel = builder.establish();
             if (tunnel == null) throw new IOException("Android не создал VPN-интерфейс");
             Session session;
-            try { session = new Session(tunnel, rules, network); }
+            try { session = new Session(tunnel, rules, network, list.sha256); }
             catch (IOException e) { tunnel.close(); throw e; }
             message = "";
             current = session; // Only report active after establish and stream initialization succeed.
@@ -223,6 +220,7 @@ public final class AdVpnService extends VpnService {
 
     static final class Session {
         final DomainPolicy rules;
+        final String listVersion;
         volatile Network network;
         final Set<Closeable> sockets = ConcurrentHashMap.newKeySet();
         final ParcelFileDescriptor.AutoCloseInputStream input;
@@ -231,8 +229,8 @@ public final class AdVpnService extends VpnService {
         final AtomicLong blocked = new AtomicLong(), forwarded = new AtomicLong(), failed = new AtomicLong();
         final ThreadPoolExecutor workers = new ThreadPoolExecutor(4, 4, 0, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(64), new ThreadPoolExecutor.AbortPolicy());
-        Session(ParcelFileDescriptor tunnel, DomainPolicy rules, Network network) throws IOException {
-            this.rules = rules; this.network = network;
+        Session(ParcelFileDescriptor tunnel, DomainPolicy rules, Network network, String listVersion) throws IOException {
+            this.rules = rules; this.network = network; this.listVersion = listVersion;
             ParcelFileDescriptor duplicate = ParcelFileDescriptor.dup(tunnel.getFileDescriptor());
             input = new ParcelFileDescriptor.AutoCloseInputStream(tunnel);
             output = new ParcelFileDescriptor.AutoCloseOutputStream(duplicate);

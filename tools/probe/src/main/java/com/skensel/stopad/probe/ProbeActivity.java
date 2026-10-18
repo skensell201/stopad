@@ -31,6 +31,7 @@ public final class ProbeActivity extends Activity {
             result.putBoolean("networkReady", dnsNetwork != null);
             result.putBoolean("adResolves", resolves("doubleclick.net"));
             result.putBoolean("normalResolves", resolves("example.com"));
+            result.putBoolean("expandedResolves", resolves("s0.2mdn.net"));
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress("1.1.1.1", 443), 4000);
                 result.putBoolean("directTcp", true);

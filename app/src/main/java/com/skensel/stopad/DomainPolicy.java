@@ -5,13 +5,17 @@ import java.util.*;
 
 /** Immutable per-session rules: user exceptions override block rules, including subdomains. */
 final class DomainPolicy {
-    private final DomainRules blocked, allowed;
+    private final DomainRules blocked, supplemental, allowed;
     DomainPolicy(Collection<String> blocked, Collection<String> allowed) {
-        this.blocked = new DomainRules(blocked);
+        this(new DomainRules(blocked), Collections.emptySet(), allowed);
+    }
+    DomainPolicy(DomainRules blocked, Collection<String> supplemental, Collection<String> allowed) {
+        this.blocked = blocked;
+        this.supplemental = new DomainRules(supplemental);
         this.allowed = new DomainRules(allowed);
     }
     boolean blocks(String domain) {
-        try { return !allowed.blocks(domain) && blocked.blocks(domain); }
+        try { return !allowed.blocks(domain) && (blocked.blocks(domain) || supplemental.blocks(domain)); }
         catch (IllegalArgumentException nonHostName) { return false; } // Valid DNS SRV labels can contain underscores.
     }
     static Set<String> parseExceptions(String text) {

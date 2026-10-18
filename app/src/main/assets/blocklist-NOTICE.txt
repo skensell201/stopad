@@ -1,0 +1,10 @@
+The Block List Project — Ads
+https://github.com/blocklistproject/Lists
+Source: https://raw.githubusercontent.com/blocklistproject/Lists/main/ads.txt
+License: Unlicense (full text included in blocklist-LICENSE.txt).
+Bundled raw source is included as ads-hosts.txt, unchanged.
+StopAd parses the hosts records, removes localhost/IP entries and duplicates,
+normalizes domain names and ignores unsupported underscore names.
+Matching also covers subdomains; 14 local StopAd rules are applied separately.
+For the bundled revision and SHA-256 see ads-snapshot.properties.
+Updates use the same fixed HTTPS source and retain the original downloaded bytes.

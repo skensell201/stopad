@@ -17,13 +17,13 @@ import java.util.*;
 
 public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private TextView status, counters;
-    private Button toggle, manualButton, exceptionsButton;
+    private TextView status, counters, listStatus;
+    private Button toggle, manualButton, exceptionsButton, updateListButton;
     private final List<CheckBox> choices = new ArrayList<>();
     private final Runnable refresh = new Runnable() {
         @Override public void run() { update(); handler.postDelayed(this, 1000); }
     };
-    @Override public void onCreate(Bundle state) { super.onCreate(state); render(); }
+    @Override public void onCreate(Bundle state) { super.onCreate(state); BlocklistRepository.initialize(this); render(); }
     @Override public void onResume() { super.onResume(); render(); handler.removeCallbacks(refresh); handler.post(refresh); }
     @Override public void onPause() { handler.removeCallbacks(refresh); super.onPause(); }
 
@@ -86,6 +86,16 @@ public final class MainActivity extends Activity {
         exceptionsButton.setText(getString(R.string.exceptions_count, prefs.getStringSet("domain_exceptions", Collections.emptySet()).size()));
         exceptionsButton.setOnClickListener(v -> showExceptions());
         layout.addView(exceptionsButton);
+        text(layout, R.string.list_title, 20);
+        listStatus = text(layout, R.string.list_loading, 14);
+        updateListButton = new Button(this);
+        updateListButton.setText(R.string.update_list);
+        updateListButton.setOnClickListener(v -> { BlocklistRepository.update(this); update(); });
+        layout.addView(updateListButton);
+        Button license = new Button(this);
+        license.setText(R.string.list_credits);
+        license.setOnClickListener(v -> showListCredits());
+        layout.addView(license);
         text(layout, R.string.limitations, 14);
         text(layout, R.string.privacy, 14);
         update();
@@ -107,7 +117,21 @@ public final class MainActivity extends Activity {
         status.setText(active ? getString(AdVpnService.online() ? R.string.on : R.string.waiting_network) : (AdVpnService.message.isEmpty() ? getString(R.string.off) : AdVpnService.message));
         counters.setText(active ? getString(R.string.stats, AdVpnService.blocked(), AdVpnService.forwarded(), AdVpnService.failed()) : getString(R.string.session_empty));
         toggle.setText(active ? R.string.stop : R.string.start);
-        toggle.setEnabled(active || !GameCatalog.selected(this).isEmpty());
+        toggle.setEnabled(active || (BlocklistRepository.snapshot != null && !GameCatalog.selected(this).isEmpty()));
+        BlocklistSnapshot snapshot = BlocklistRepository.snapshot;
+        if (listStatus != null) {
+            String detail = snapshot == null ? getString(R.string.list_loading) : getString(R.string.list_info,
+                    snapshot.domains.size(), snapshot.sha256.substring(0, 12),
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                            .format(new Date(snapshot.fetchedAt)));
+            if (BlocklistRepository.busy && snapshot != null) detail += "\n" + getString(R.string.list_updating);
+            else if (!BlocklistRepository.message.isEmpty()) detail += "\n" + BlocklistRepository.message;
+            AdVpnService.Session session = AdVpnService.current;
+            if (snapshot != null && session != null && !session.listVersion.equals(snapshot.sha256))
+                detail += "\n" + getString(R.string.list_restart);
+            listStatus.setText(detail);
+        }
+        if (updateListButton != null) updateListButton.setEnabled(!BlocklistRepository.busy);
         if (manualButton != null) manualButton.setEnabled(!active);
         if (exceptionsButton != null) exceptionsButton.setEnabled(!active);
         for (CheckBox box : choices) box.setEnabled(!active);
@@ -174,6 +198,19 @@ public final class MainActivity extends Activity {
             } catch (IllegalArgumentException invalid) { input.setError(getString(R.string.invalid_domains)); }
         }));
         dialog.show();
+    }
+    private void showListCredits() {
+        StringBuilder text = new StringBuilder();
+        try {
+            for (String asset : new String[]{"blocklist-NOTICE.txt", "blocklist-LICENSE.txt"}) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(getAssets().open(asset), java.nio.charset.StandardCharsets.UTF_8))) {
+                    for (String line; (line = reader.readLine()) != null;) text.append(line).append('\n');
+                }
+                text.append('\n');
+            }
+            new AlertDialog.Builder(this).setTitle(R.string.list_credits).setMessage(text.toString())
+                    .setPositiveButton(android.R.string.ok, null).show();
+        } catch (java.io.IOException e) { Toast.makeText(this, R.string.credits_failed, Toast.LENGTH_SHORT).show(); }
     }
     private TextView text(LinearLayout layout, int resource, int size) {
         TextView view = new TextView(this);

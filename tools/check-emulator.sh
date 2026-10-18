@@ -14,7 +14,9 @@ probe_adb="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}/platf
 "$probe_adb" -s "$probe_serial" shell appops set com.skensel.stopad ACTIVATE_VPN allow
 probe_log=$(mktemp)
 trap 'rm -f "$probe_log"' EXIT
-if [ "${2:-}" = "--network" ]; then
+if [ "${2:-}" = "--lists" ]; then
+    "$probe_adb" -s "$probe_serial" shell am instrument -w -e listTests true com.skensel.stopad.test/com.skensel.stopad.VpnIntegration > "$probe_log"
+elif [ "${2:-}" = "--network" ]; then
     "$probe_adb" -s "$probe_serial" shell am instrument -w -e networkTests true com.skensel.stopad.test/com.skensel.stopad.VpnIntegration > "$probe_log"
 else
     "$probe_adb" -s "$probe_serial" shell am instrument -w com.skensel.stopad.test/com.skensel.stopad.VpnIntegration > "$probe_log"
