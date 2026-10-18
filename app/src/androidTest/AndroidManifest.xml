@@ -1,3 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <instrumentation android:name="com.skensel.stopad.VpnIntegration" android:targetPackage="com.skensel.stopad"/>
+    <instrumentation android:name="com.skensel.stopad.UiIntegration" android:targetPackage="com.skensel.stopad"/>
 </manifest>
