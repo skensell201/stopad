@@ -1,0 +1,16 @@
+# StopAd seed rules v1, 2026-10-18. Manually authored domain names, no third-party list copied.
+# Small experimental set, not a complete advertising blocklist. Exact host + subdomains.
+doubleclick.net
+googleadservices.com
+googlesyndication.com
+adservice.google.com
+ads.unity3d.com
+unityads.unity3d.com
+adcolony.com
+ads.applovin.com
+rt.applovin.com
+ms.applovin.com
+ads.vungle.com
+cdn-lb.vungle.com
+ads.chartboost.com
+live.chartboost.com

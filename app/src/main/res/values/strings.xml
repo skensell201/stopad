@@ -1,3 +1,19 @@
 <resources>
+    <string name="app_name">StopAd</string>
+    <string name="tagline">Играйте без лишних пауз</string>
+    <string name="off">Защита выключена</string>
+    <string name="on">DNS-фильтрация включена</string>
+    <string name="session_empty">Счётчики появятся после включения</string>
+    <string name="stats">DNS за сеанс: заблокировано %1$d · пропущено %2$d · ошибок %3$d</string>
+    <string name="start">Включить защиту игр</string>
+    <string name="stop">Выключить защиту</string>
+    <string name="games_title">Ваши игры</string>
+    <string name="games_hint">Браузеры исключены. Чтобы изменить выбор, остановите защиту.</string>
+    <string name="choose_first">Сначала выберите игру</string>
+    <string name="no_games">Игры не найдены. Сейчас доступны приложения с категорией GAME. Ручное добавление появится позже.</string>
     <string name="game_label">%1$s\n%2$s</string>
+    <string name="vpn_denied">Разрешение VPN не получено</string>
+    <string name="start_failed">Не удалось запустить VPN. Попробуйте снова.</string>
+    <string name="limitations">Экспериментальная версия • небольшой список рекламных доменов. Встроенная реклама и собственный зашифрованный DNS игр могут обходить фильтр. Для этого прототипа Private DNS Android должен быть выключен. Награды за просмотр видео могут быть недоступны.</string>
+    <string name="privacy">Фильтрация выполняется на устройстве. Разрешённые DNS-запросы отправляются Cloudflare (1.1.1.1) по UDP без шифрования. История доменов не сохраняется. Одновременно может работать только один VPN.</string>
 </resources>

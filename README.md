@@ -1,9 +1,20 @@
 # StopAd
 
-Android project bootstrap. The current development build saves a selection of installed games; ad blocking is not implemented yet.
+Project documentation and work log: [Obsidian: Projects/stopad](obsidian://open?vault=ivan_vault&file=Projects%2Fstopad).
 
-Project requirements, decisions and work log: [Obsidian: Projects/stopad](obsidian://open?vault=ivan_vault&file=Projects%2Fstopad).
+Open in Android Studio with JDK 17+ and Android SDK 36, or run:
 
-Open in Android Studio (JDK 17+, Android SDK 36) or run `./gradlew :app:assembleDebug :app:lintDebug`.
+```sh
+./gradlew :app:assembleDebug :app:lintDebug
+tools/check-core.sh
+```
 
-No root, server, telemetry or browser filtering. Planned engine: per-game local VPN with domain filtering. No promise of universal ad removal.
+On macOS, Android Studio's bundled JDK can be selected with:
+
+```sh
+export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+```
+
+Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
+
+For network integration tests on an isolated running emulator, use `tools/check-emulator.sh emulator-5554`. This installs the app, instrumentation and two test probes, and grants VPN consent only in that emulator. Stop any existing StopAd VPN first. Test details and limitations are documented in Obsidian.

@@ -3,7 +3,7 @@ package com.skensel.stopad;
 import java.net.IDN;
 import java.util.*;
 
-/** Exact domains and their subdomains; never substring matching. No bundled production list yet. */
+/** Exact domains and their subdomains; never substring matching. */
 public final class DomainRules {
     private final Set<String> blocked = new HashSet<>();
     public DomainRules(Collection<String> domains) {
