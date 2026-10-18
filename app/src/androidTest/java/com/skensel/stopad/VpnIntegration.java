@@ -14,10 +14,18 @@ import java.util.concurrent.*;
 /** Run only with the isolated emulator probes installed. No production backdoor or exported test API. */
 public final class VpnIntegration extends Instrumentation {
     private Context context;
-    private boolean networkTests, listTests;
+    private boolean networkTests, listTests, uiTests;
     private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser", manualGame = "com.skensel.stopad.probe.manual";
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
+    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); uiTests = arguments != null && "true".equals(arguments.getString("uiTests")); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
+    @Override public void callActivityOnCreate(Activity activity, Bundle state) {
+        if (uiTests) {
+            activity.setTurnScreenOn(true); activity.setShowWhenLocked(true);
+            activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+        super.callActivityOnCreate(activity, state);
+    }
     @Override public void onStart() {
+        if (uiTests) { new UiIntegration(this).run(); return; }
         if (listTests) { new ListIntegration(this).run(); return; }
         Bundle result = new Bundle();
         Set<String> original = Collections.emptySet();
@@ -108,6 +116,10 @@ public final class VpnIntegration extends Instrumentation {
             long deadline = System.currentTimeMillis() + 20000;
             while (AdVpnService.active() && System.currentTimeMillis() < deadline) Thread.sleep(100);
             require(!AdVpnService.active() && AdVpnService.message.contains("Private DNS"), "Stop when Private DNS enabled: " + AdVpnService.message);
+            require(ProtectionReadiness.check(context, true, true) == ProtectionReadiness.State.PRIVATE_DNS,
+                    "Preflight detects active Private DNS");
+            launchVpn(); Thread.sleep(1000);
+            require(!AdVpnService.active() && AdVpnService.message.contains("Private DNS"), "Private DNS must prevent establishment");
         } finally {
             restoreSetting("private_dns_specifier", dnsName);
             restoreSetting("private_dns_mode", dnsMode);

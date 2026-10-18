@@ -6,8 +6,8 @@ android {
         applicationId = "com.skensel.stopad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0-dev"
+        versionCode = 6
+        versionName = "0.5.1-dev"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

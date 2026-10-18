@@ -51,7 +51,7 @@
     <string name="ui_privacy_sub">DNS-провайдер и обработка данных</string>
     <string name="ui_session_title">Статистика сеанса</string>
     <string name="ui_session_sub">Запросы текущего подключения</string>
-    <string name="ui_version">StopAd · 0.5.0-dev</string>
+    <string name="ui_version">StopAd · 0.5.1-dev</string>
     <string name="ui_home">Главная</string>
     <string name="ui_on_short">Включена</string>
     <string name="ui_off_short">Выключена</string>
@@ -59,4 +59,12 @@
     <string name="ui_game_summary">Выбрано игр: %1$d</string>
     <string name="ui_choose_games">Выбрать игры</string>
     <string name="ui_list_detail">The Block List Project · Ads\n%1$s доменов\nВерсия: %2$s\nПолучен: %3$s</string>
+    <string name="ui_waiting_short">Ожидание сети</string>
+    <string name="ui_dns_setup">Настроить DNS</string>
+    <string name="ui_dns_required">Системный Private DNS мешает фильтрации. Выключи его перед запуском защиты.</string>
+    <string name="ui_dns_setup_help">Открой настройки сети Android, найди «Частный DNS» (Private DNS) и выбери «Выключен». Вернись в StopAd и включи защиту. Название и расположение настройки зависят от телефона. StopAd сам эту настройку не меняет.</string>
+    <string name="ui_open_settings">Открыть настройки</string>
+    <string name="ui_network_required">Подключись к Wi-Fi или мобильной сети. Статус обновится автоматически.</string>
+    <string name="ui_no_network">Нет подключения</string>
+    <string name="ui_last_error">Последняя попытка: %1$s</string>
 </resources>

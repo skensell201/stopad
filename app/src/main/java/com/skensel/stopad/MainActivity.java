@@ -15,7 +15,7 @@ import java.util.*;
 
 public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private TextView status, counters, listStatus, ruleCount, selectionHint, gameSummary;
+    private TextView status, counters, listStatus, ruleCount, selectionHint, gameSummary, protectionDetail;
     private Button toggle, manualButton, exceptionsButton, updateListButton;
     private final List<CheckBox> choices = new ArrayList<>();
     private int tab;
@@ -42,7 +42,7 @@ public final class MainActivity extends Activity {
     private void navigate(int destination) { tab = destination; render(); }
     private void render() {
         choices.clear();
-        status = counters = listStatus = ruleCount = selectionHint = gameSummary = null;
+        status = counters = listStatus = ruleCount = selectionHint = gameSummary = protectionDetail = null;
         toggle = manualButton = exceptionsButton = updateListButton = null;
         LinearLayout shell = column(); shell.setBackgroundColor(MatteUi.BG);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
@@ -77,14 +77,16 @@ public final class MainActivity extends Activity {
     private void home(LinearLayout parent) {
         heading(parent, getString(R.string.app_name), getString(R.string.ui_header_sub), "settings", () -> navigate(2));
         FrameLayout hero = new FrameLayout(this); MatteUi.card(hero, 23); hero.setClipToOutline(true);
-        hero.addView(new MatteUi.Hero(this), new FrameLayout.LayoutParams(-1, -1));
+        boolean largeText = getResources().getConfiguration().fontScale > 1.25f;
+        MatteUi.Hero artwork = new MatteUi.Hero(this); artwork.setAlpha(largeText ? .22f : 1f);
+        hero.addView(artwork, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout copy = column(); copy.setPadding(dp(21), dp(23), 0, dp(20));
         TextView eyebrow = label(getString(R.string.ui_hero_badge), 10, 0xffc3b9df, true); eyebrow.setLetterSpacing(.12f); full(copy, eyebrow);
         gap(copy, 21);
         full(copy, label(getString(R.string.ui_hero_title), 31, MatteUi.TEXT, true)); gap(copy, 13);
         TextView description = label(getString(R.string.ui_hero_sub), 12, 0xffbdc2d1, false); description.setLineSpacing(dp(3), 1); full(copy, description);
-        hero.addView(copy, new FrameLayout.LayoutParams((int) (getResources().getDisplayMetrics().widthPixels * .52f), -1));
-        parent.addView(hero, new LinearLayout.LayoutParams(-1, dp(224))); gap(parent, 17);
+        hero.addView(copy, new FrameLayout.LayoutParams(largeText ? -1 : (int) (getResources().getDisplayMetrics().widthPixels * .52f), -1));
+        parent.addView(hero, new LinearLayout.LayoutParams(-1, dp(224 * Math.max(1f, getResources().getConfiguration().fontScale)))); gap(parent, 17);
 
         LinearLayout control = column(); control.setPadding(dp(18), dp(17), dp(18), dp(17)); MatteUi.card(control, 20);
         LinearLayout stateRow = row();
@@ -92,7 +94,9 @@ public final class MainActivity extends Activity {
         TextView title = label(getString(R.string.ui_protection), 16, MatteUi.TEXT, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1); titleParams.leftMargin = dp(10); stateRow.addView(title, titleParams);
         status = label("", 12, MatteUi.MUTED, false); status.setMaxWidth(dp(150)); status.setGravity(Gravity.END); stateRow.addView(status);
-        full(control, stateRow); gap(control, 16);
+        full(control, stateRow); gap(control, 12);
+        protectionDetail = label("", 12, MatteUi.MUTED, false); protectionDetail.setLineSpacing(dp(3), 1); full(control, protectionDetail);
+        gap(control, 12);
         toggle = MatteUi.button(this, getString(R.string.start), true); toggle.setOnClickListener(v -> toggleProtection()); full(control, toggle);
         gap(control, 11); selectionHint = label("", 11, MatteUi.MUTED, false); selectionHint.setGravity(Gravity.CENTER); full(control, selectionHint);
         full(parent, control); gap(parent, 17);
@@ -168,7 +172,8 @@ public final class MainActivity extends Activity {
         checkbox.setChecked(selected.contains(app.packageName));
         checkbox.setOnCheckedChangeListener((button, checked) -> {
             if (checked) selected.add(app.packageName); else selected.remove(app.packageName);
-            getSharedPreferences("games", MODE_PRIVATE).edit().putStringSet("selected", new HashSet<>(selected)).apply(); update();
+            getSharedPreferences("games", MODE_PRIVATE).edit().putStringSet("selected", new HashSet<>(selected)).apply();
+            if (tab == 1 && selectedOnly && !checked) render(); else update();
         });
         choices.add(checkbox); top.addView(checkbox, new LinearLayout.LayoutParams(dp(42), dp(48)));
         full(card, top); gap(card, 18);
@@ -221,10 +226,21 @@ public final class MainActivity extends Activity {
         if (AdVpnService.active()) startService(new Intent(this, AdVpnService.class).setAction(AdVpnService.STOP));
         else if (GameCatalog.selected(this).isEmpty()) navigate(1);
         else {
+            ProtectionReadiness.State readiness = ProtectionReadiness.check(this, true, BlocklistRepository.snapshot != null);
+            if (readiness == ProtectionReadiness.State.PRIVATE_DNS) {
+                new AlertDialog.Builder(this).setTitle(R.string.ui_dns_setup).setMessage(R.string.ui_dns_setup_help)
+                        .setPositiveButton(R.string.ui_open_settings, (dialog, which) -> openNetworkSettings())
+                        .setNegativeButton(android.R.string.cancel, null).show(); return;
+            }
+            if (readiness != ProtectionReadiness.State.READY) { update(); return; }
             Intent consent = VpnService.prepare(this);
             if (consent == null) startProtection(); else startActivityForResult(consent, 10);
         }
         update();
+    }
+    private void openNetworkSettings() {
+        try { startActivity(new Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)); }
+        catch (ActivityNotFoundException e) { startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)); }
     }
     private String number(long value) { return java.text.NumberFormat.getIntegerInstance(new Locale("ru")).format(value); }
     private void showStats() {
@@ -235,14 +251,30 @@ public final class MainActivity extends Activity {
     private void info(int title, int text) { new AlertDialog.Builder(this).setTitle(title).setMessage(text).setPositiveButton(android.R.string.ok, null).show(); }
     private void update() {
         boolean active = AdVpnService.active(); Set<String> selected = GameCatalog.selected(this); BlocklistSnapshot snapshot = BlocklistRepository.snapshot;
-        if (status != null) { status.setText(active ? getString(AdVpnService.online() ? R.string.ui_on_short : R.string.waiting_network) : (AdVpnService.message.isEmpty() ? getString(R.string.ui_off_short) : AdVpnService.message)); status.setTextColor(active ? MatteUi.TEAL : MatteUi.MUTED); }
+        ProtectionReadiness.State readiness = active ? ProtectionReadiness.State.READY
+                : ProtectionReadiness.check(this, !selected.isEmpty(), snapshot != null);
+        if (status != null) {
+            status.setText(active ? getString(AdVpnService.online() ? R.string.ui_on_short : R.string.ui_waiting_short)
+                    : getString(R.string.ui_off_short));
+            status.setTextColor(active && AdVpnService.online() ? MatteUi.TEAL : MatteUi.MUTED);
+        }
+        if (protectionDetail != null) {
+            String detail = active ? (AdVpnService.online() ? "" : getString(R.string.waiting_network))
+                    : readiness == ProtectionReadiness.State.PRIVATE_DNS ? getString(R.string.ui_dns_required)
+                    : readiness == ProtectionReadiness.State.NO_NETWORK ? getString(R.string.ui_network_required)
+                    : !AdVpnService.message.isEmpty() ? getString(R.string.ui_last_error, AdVpnService.message) : "";
+            protectionDetail.setText(detail); protectionDetail.setVisibility(detail.isEmpty() ? View.GONE : View.VISIBLE);
+        }
         if (counters != null) counters.setText(active ? number(AdVpnService.blocked()) : "—");
         if (ruleCount != null) ruleCount.setText(snapshot == null ? "—" : number(snapshot.domains.size()));
         if (selectionHint != null) selectionHint.setText(getString(R.string.ui_selection_hint, selected.size()));
         if (gameSummary != null) gameSummary.setText(getString(R.string.ui_game_summary, selected.size()));
         if (toggle != null) {
-            toggle.setText(active ? R.string.stop : selected.isEmpty() ? R.string.ui_choose_games : snapshot == null ? R.string.list_loading : R.string.start);
-            toggle.setEnabled(active || selected.isEmpty() || snapshot != null); toggle.setAlpha(toggle.isEnabled() ? 1 : .5f);
+            toggle.setText(active ? R.string.stop : readiness == ProtectionReadiness.State.NO_GAMES ? R.string.ui_choose_games
+                    : readiness == ProtectionReadiness.State.PRIVATE_DNS ? R.string.ui_dns_setup
+                    : readiness == ProtectionReadiness.State.NO_NETWORK ? R.string.ui_no_network
+                    : readiness == ProtectionReadiness.State.LIST_LOADING ? R.string.list_loading : R.string.start);
+            toggle.setEnabled(active || (readiness != ProtectionReadiness.State.LIST_LOADING && readiness != ProtectionReadiness.State.NO_NETWORK)); toggle.setAlpha(toggle.isEnabled() ? 1 : .5f);
         }
         if (listStatus != null) {
             String detail = snapshot == null ? getString(R.string.list_loading) : getString(R.string.ui_list_detail,
