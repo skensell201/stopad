@@ -24,6 +24,10 @@ public final class PacketCheck {
         DnsPacket.put16(result, 10, DnsPacket.checksum(result, 0, 20)); return result;
     }
     public static void main(String[] args) {
+        DnsPacket tcp = DnsPacket.fromTcp(query("ads.example.com"));
+        check(tcp != null && tcp.domain.equals("ads.example.com") && (tcp.error(3)[3]&15)==3);
+        byte[] invalidTcp=query("example.com");invalidTcp[2]=(byte)0x81;
+        check(DnsPacket.fromTcp(invalidTcp)==null && DnsPacket.fromTcp(new byte[0])==null);
         byte[] raw = ip(query("ads.example.com"));
         DnsPacket p = DnsPacket.parse(raw, raw.length);
         check(p != null && p.domain.equals("ads.example.com"));

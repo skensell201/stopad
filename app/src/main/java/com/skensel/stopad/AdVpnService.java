@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.Consumer;
 
 /** DNS-only split VPN. It never routes the Internet default route. */
 public final class AdVpnService extends VpnService {
@@ -63,7 +64,7 @@ public final class AdVpnService extends VpnService {
             ParcelFileDescriptor tunnel = builder.establish();
             if (tunnel == null) throw new IOException("Android не создал VPN-интерфейс");
             Session session;
-            try { session = new Session(tunnel, rules, network, list.sha256); }
+            try { session = new Session(tunnel, rules, network, list.sha256, this); }
             catch (IOException e) { tunnel.close(); throw e; }
             message = "";
             current = session; // Only report active after establish and stream initialization succeed.
@@ -95,6 +96,7 @@ public final class AdVpnService extends VpnService {
         try {
             poll.fd = s.input.getFD(); poll.events = (short) OsConstants.POLLIN;
             while (!s.closed.get()) {
+                s.tcp.tick(SystemClock.elapsedRealtime());
                 int ready = Os.poll(new StructPollfd[]{poll}, 500);
                 if (s.closed.get()) break;
                 if (ready == 0) continue;
@@ -103,6 +105,7 @@ public final class AdVpnService extends VpnService {
                 if ((poll.revents & OsConstants.POLLIN) == 0) continue;
                 int n = s.input.read(buffer);
                 if (n < 0) throw new EOFException();
+                if(n>9 && buffer[9]==6) { s.tcp.accept(buffer,n,SystemClock.elapsedRealtime());continue; }
                 DnsPacket packet = DnsPacket.parse(buffer, n);
                 if (packet == null) continue;
                 if (s.rules.blocks(packet.domain)) {
@@ -167,13 +170,23 @@ public final class AdVpnService extends VpnService {
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), networkMonitor, main);
     }
 
-    private void resolve(Session s, DnsPacket packet) {
+    private void resolveTcp(Session s, byte[] query, Consumer<byte[]> reply) {
+        DnsPacket packet=DnsPacket.fromTcp(query);
+        if(packet==null) { reply.accept(null);return; }
+        if(s.rules.blocks(packet.domain)) {
+            s.blocked.incrementAndGet();reply.accept(packet.error(3));return;
+        }
+        try { s.workers.execute(()->resolve(s,packet,reply)); }
+        catch(RejectedExecutionException overloaded) { s.failed.incrementAndGet();reply.accept(packet.error(2)); }
+    }
+    private void resolve(Session s, DnsPacket packet) { resolve(s,packet,null); }
+    private void resolve(Session s, DnsPacket packet, Consumer<byte[]> tcpReply) {
         byte[] response = null;
         Network network = s.network;
         try {
             if (network == null) throw new IOException("Offline");
             DnsUpstream upstream = new DnsUpstream(new InetSocketAddress("1.1.1.1", 53));
-            response = upstream.resolve(packet, new DnsUpstream.Sockets() {
+            DnsUpstream.Sockets sockets = new DnsUpstream.Sockets() {
                 @Override public DatagramSocket udp() throws IOException {
                     DatagramSocket socket = new DatagramSocket();
                     try {
@@ -185,19 +198,22 @@ public final class AdVpnService extends VpnService {
                 @Override public Socket tcp() throws IOException {
                     Socket socket = new Socket();
                     try {
+                        // Android protect(Socket) needs an allocated native descriptor before connect.
+                        socket.bind(new InetSocketAddress(0));
                         s.track(socket, network);
                         if (!protect(socket)) throw new IOException("Cannot protect DNS socket");
                         network.bindSocket(socket); return socket;
                     } catch (IOException e) { socket.close(); s.sockets.remove(socket); throw e; }
                 }
                 @Override public void release(Closeable socket) { s.sockets.remove(socket); }
-            });
+            };
+            response = tcpReply==null ? upstream.resolve(packet,sockets) : upstream.resolveTcp(packet,sockets);
         } catch (IOException e) { s.failed.incrementAndGet(); }
         try {
             if (response == null) response = packet.error(2);
             else s.forwarded.incrementAndGet();
-            s.send(packet.reply(response));
-        } catch (IOException e) {
+            if(tcpReply==null) s.send(packet.reply(response)); else tcpReply.accept(response);
+        } catch (IOException | UncheckedIOException e) {
             if (!s.closed.get()) main.post(() -> {
                 if (current == s) { stopSession("Не удалось вернуть ответ DNS"); stopSelf(); }
             });
@@ -220,6 +236,7 @@ public final class AdVpnService extends VpnService {
 
     static final class Session {
         final DomainPolicy rules;
+        final TcpDnsTransport tcp;
         final String listVersion;
         volatile Network network;
         final Set<Closeable> sockets = ConcurrentHashMap.newKeySet();
@@ -229,20 +246,27 @@ public final class AdVpnService extends VpnService {
         final AtomicLong blocked = new AtomicLong(), forwarded = new AtomicLong(), failed = new AtomicLong();
         final ThreadPoolExecutor workers = new ThreadPoolExecutor(4, 4, 0, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(64), new ThreadPoolExecutor.AbortPolicy());
-        Session(ParcelFileDescriptor tunnel, DomainPolicy rules, Network network, String listVersion) throws IOException {
+        Session(ParcelFileDescriptor tunnel, DomainPolicy rules, Network network, String listVersion, AdVpnService owner) throws IOException {
             this.rules = rules; this.network = network; this.listVersion = listVersion;
             ParcelFileDescriptor duplicate = ParcelFileDescriptor.dup(tunnel.getFileDescriptor());
             input = new ParcelFileDescriptor.AutoCloseInputStream(tunnel);
             output = new ParcelFileDescriptor.AutoCloseOutputStream(duplicate);
+            tcp=new TcpDnsTransport(bytes->{
+                try { send(bytes); } catch(IOException e) { throw new UncheckedIOException(e); }
+            },(query,reply)->owner.resolveTcp(this,query,reply));
         }
         synchronized void track(Closeable socket, Network expected) throws IOException {
             if (closed.get() || !Objects.equals(network, expected)) throw new IOException("Network changed");
             sockets.add(socket);
         }
-        synchronized void switchNetwork(Network replacement) {
-            if (Objects.equals(network, replacement)) return;
-            network = replacement;
-            closeSockets();
+        void switchNetwork(Network replacement) {
+            synchronized(this) {
+                if (Objects.equals(network, replacement)) return;
+                network = replacement;
+                closeSockets();
+            }
+            // Never take the TCP monitor while holding Session: TCP output takes these locks in reverse.
+            tcp.reset();
         }
         private void closeSockets() {
             for (Closeable socket : sockets) try { socket.close(); } catch (IOException ignored) { }
@@ -251,12 +275,15 @@ public final class AdVpnService extends VpnService {
         synchronized void send(byte[] data) throws IOException {
             if (!closed.get()) output.write(data);
         }
-        synchronized void close() {
+        void close() {
+            tcp.reset();
+            synchronized(this) {
             if (!closed.compareAndSet(false, true)) return;
             workers.shutdownNow();
             closeSockets();
             try { input.close(); } catch (IOException ignored) { }
             try { output.close(); } catch (IOException ignored) { }
+            }
         }
     }
 }

@@ -3,7 +3,7 @@ package com.skensel.stopad;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-/** Minimal defensive IPv4/UDP DNS codec. TCP and fragmented packets are deliberately unsupported. */
+/** Defensive DNS message codec with IPv4/UDP envelope support. IP fragments are unsupported. */
 final class DnsPacket {
     final byte[] ip, query;
     final String domain;
@@ -12,6 +12,12 @@ final class DnsPacket {
     private DnsPacket(byte[] ip, int headerLength, byte[] query, Question question) {
         this.ip = ip; this.headerLength = headerLength; this.query = query;
         this.domain = question.domain; this.questionEnd = question.end;
+    }
+    static DnsPacket fromTcp(byte[] query) {
+        if(query.length<17 || query.length>65535 || (query[2]&0xf8)!=0 || (query[3]&15)!=0
+                || u16(query,4)!=1 || u16(query,6)!=0 || u16(query,8)!=0)return null;
+        Question question=question(query);
+        return question==null?null:new DnsPacket(null,0,query.clone(),question);
     }
     static DnsPacket parse(byte[] packet, int length) {
         if (length < 40 || length > packet.length || (packet[0] & 0xf0) != 0x40) return null;

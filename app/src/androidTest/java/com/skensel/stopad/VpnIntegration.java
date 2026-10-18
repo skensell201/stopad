@@ -14,9 +14,9 @@ import java.util.concurrent.*;
 /** Run only with the isolated emulator probes installed. No production backdoor or exported test API. */
 public final class VpnIntegration extends Instrumentation {
     private Context context;
-    private boolean networkTests, listTests, uiTests;
+    private boolean networkTests, listTests, uiTests, lifecycleTests, largeFontTests;
     private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser", manualGame = "com.skensel.stopad.probe.manual";
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); uiTests = arguments != null && "true".equals(arguments.getString("uiTests")); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
+    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); largeFontTests=arguments!=null && "true".equals(arguments.getString("largeFonts")); lifecycleTests = arguments != null && "true".equals(arguments.getString("lifecycleTests")); uiTests = arguments != null && "true".equals(arguments.getString("uiTests")); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
     @Override public void callActivityOnCreate(Activity activity, Bundle state) {
         if (uiTests) {
             activity.setTurnScreenOn(true); activity.setShowWhenLocked(true);
@@ -25,7 +25,7 @@ public final class VpnIntegration extends Instrumentation {
         super.callActivityOnCreate(activity, state);
     }
     @Override public void onStart() {
-        if (uiTests) { new UiIntegration(this).run(); return; }
+        if (uiTests) { new UiIntegration(this).run(largeFontTests); return; }
         if (listTests) { new ListIntegration(this).run(); return; }
         Bundle result = new Bundle();
         Set<String> original = Collections.emptySet();
@@ -58,6 +58,9 @@ public final class VpnIntegration extends Instrumentation {
             Bundle filtered = probe(game);
             android.util.Log.i("StopAdTest", "filtered=" + filtered + " blocked=" + AdVpnService.blocked() + " forwarded=" + AdVpnService.forwarded() + " failed=" + AdVpnService.failed());
             require(!filtered.getBoolean("expandedResolves") && !filtered.getBoolean("adResolves") && filtered.getBoolean("normalResolves") && filtered.getBoolean("directTcp"), "Selected game: " + filtered);
+            require(filtered.getBoolean("tcpDnsBlocked") && filtered.getBoolean("tcpDnsNormal"), "DNS/TCP block and pipeline forward: " + filtered);
+            require(filtered.getBoolean("tcpDnsLarge") && filtered.getBoolean("udpTcpFallback"), "Large TCP answer and native UDP-to-TCP fallback: " + filtered);
+            android.util.Log.i("StopAdTest","TCP DNS bytes="+filtered.getInt("tcpDnsLargeBytes")+", native fallback bytes="+filtered.getInt("fallbackBytes"));
             Bundle bypass = probe(browser);
             require(bypass.getBoolean("expandedResolves") && bypass.getBoolean("adResolves") && bypass.getBoolean("normalResolves") && bypass.getBoolean("directTcp"), "Browser bypass: " + bypass);
             require(AdVpnService.blocked() > 0 && AdVpnService.forwarded() > 0, "Real packet counters");
@@ -78,8 +81,9 @@ public final class VpnIntegration extends Instrumentation {
             Bundle manual = probe(manualGame);
             require(!manual.getBoolean("adResolves") && manual.getBoolean("normalResolves"), "Manually added game filtered: " + manual);
             if (networkTests) networkTransitions();
+            if (lifecycleTests) screenOffProbe();
             context.startService(new Intent(context, AdVpnService.class).setAction(AdVpnService.STOP)); awaitActive(false);
-            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward including expanded list, direct TCP, stop/restore, exceptions, manual game, restart" + (networkTests ? ", Wi-Fi/mobile transitions, Private DNS stop" : ""));
+            result.putString("stream", "PASS: empty list, browser exclusion, DNS block/forward including expanded list, direct TCP, DNS/TCP pipeline and large native fallback, stop/restore, exceptions, manual game, restart" + (networkTests ? ", Wi-Fi/mobile transitions, Private DNS stop" : "") + (lifecycleTests ? ", screen-off background UDP/TCP" : ""));
             ok = true;
         } catch (Throwable failure) {
             result.putString("stream", "FAIL: " + failure);
@@ -92,6 +96,28 @@ public final class VpnIntegration extends Instrumentation {
             }
         }
         finish(ok ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void screenOffProbe() throws Exception {
+        PowerManager power=context.getSystemService(PowerManager.class);
+        boolean interactive=power.isInteractive();
+        try {
+            shell("cmd power sleep");
+            long deadline=SystemClock.elapsedRealtime()+5000;
+            while(power.isInteractive() && SystemClock.elapsedRealtime()<deadline)Thread.sleep(50);
+            require(!power.isInteractive(),"Emulator screen must be off before background test");
+            Thread.sleep(1000);
+            CountDownLatch done=new CountDownLatch(1);Bundle[] answer=new Bundle[1];
+            ResultReceiver receiver=new ResultReceiver(new Handler(Looper.getMainLooper())) {
+                @Override protected void onReceiveResult(int code,Bundle data) { answer[0]=data;done.countDown(); }
+            };
+            Parcel parcel=Parcel.obtain();receiver.writeToParcel(parcel,0);parcel.setDataPosition(0);
+            ResultReceiver remote=ResultReceiver.CREATOR.createFromParcel(parcel);parcel.recycle();
+            context.sendBroadcast(new Intent().setClassName(manualGame,"com.skensel.stopad.probe.BackgroundProbe").putExtra("receiver",remote));
+            require(done.await(12,TimeUnit.SECONDS),"Background probe timed out");Bundle result=answer[0];
+            require(result.getBoolean("screenOff") && !power.isInteractive(),"DNS probe must not wake screen: "+result);
+            require(result.getBoolean("blocked") && result.getBoolean("forwarded") && result.getBoolean("tcpBlocked"),"Background DNS with screen off: "+result);
+            require(AdVpnService.active(),"VPN must remain active with screen off");
+        } finally { if(interactive)shell("cmd power wakeup"); }
     }
     private void networkTransitions() throws Exception {
         String wifi = shell("settings get global wifi_on").trim();

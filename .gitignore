@@ -6,3 +6,6 @@ local.properties
 .DS_Store
 *.jks
 *.keystore
+*.p12
+*.pfx
+signing.properties

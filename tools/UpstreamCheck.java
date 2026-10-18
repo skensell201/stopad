@@ -11,14 +11,19 @@ public final class UpstreamCheck {
         public void release(Closeable socket) { opened.remove(socket); }
     }
     static byte[] exchange(DnsPacket packet, byte[] udpReply, byte[] tcpReply, boolean shortBody) throws Exception {
+        return exchange(packet,udpReply,tcpReply,shortBody,false);
+    }
+    static byte[] exchange(DnsPacket packet, byte[] udpReply, byte[] tcpReply, boolean shortBody, boolean fullTcp) throws Exception {
         InetAddress loop = InetAddress.getLoopbackAddress();
         try (ServerSocket tcp = new ServerSocket(0, 1, loop); DatagramSocket udp = new DatagramSocket(tcp.getLocalPort(), loop)) {
             tcp.setSoTimeout(3000); udp.setSoTimeout(3000);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             Future<?> server = executor.submit(() -> {
                 try {
-                    byte[] data = new byte[4096]; DatagramPacket request = new DatagramPacket(data, data.length); udp.receive(request);
-                    udp.send(new DatagramPacket(udpReply, udpReply.length, request.getSocketAddress()));
+                    if (!fullTcp) {
+                        byte[] data = new byte[4096]; DatagramPacket request = new DatagramPacket(data, data.length); udp.receive(request);
+                        udp.send(new DatagramPacket(udpReply, udpReply.length, request.getSocketAddress()));
+                    }
                     if (tcpReply != null) try (Socket socket = tcp.accept()) {
                         DataInputStream input = new DataInputStream(socket.getInputStream());
                         byte[] q = new byte[input.readUnsignedShort()]; input.readFully(q);
@@ -30,7 +35,8 @@ public final class UpstreamCheck {
             });
             Sockets sockets = new Sockets();
             try {
-                byte[] result = new DnsUpstream(new InetSocketAddress(loop, tcp.getLocalPort())).resolve(packet, sockets);
+                DnsUpstream upstream = new DnsUpstream(new InetSocketAddress(loop, tcp.getLocalPort()));
+                byte[] result = fullTcp ? upstream.resolveTcp(packet,sockets) : upstream.resolve(packet,sockets);
                 server.get(4, TimeUnit.SECONDS); return result;
             } finally {
                 executor.shutdownNow();
@@ -60,6 +66,8 @@ public final class UpstreamCheck {
         byte[] ednsRaw = PacketCheck.ip(edns); DnsPacket opt = DnsPacket.parse(ednsRaw, ednsRaw.length);
         PacketCheck.check(opt.udpLimit() == 1232);
         PacketCheck.check(exchange(opt, truncated, large, false).length == 600);
+        byte[] huge = Arrays.copyOf(full, 6000);
+        PacketCheck.check(Arrays.equals(exchange(packet, truncated, huge, false, true),huge));
         System.out.println("DnsUpstream: UDP, TCP retry/framing, EDNS limits, truncation and socket cleanup passed");
     }
 }
