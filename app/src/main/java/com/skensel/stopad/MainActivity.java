@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
         LinearLayout shell = column(); shell.setBackgroundColor(MatteUi.BG);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
-        LinearLayout content = column(); content.setPadding(dp(22), dp(18), dp(22), dp(26));
+        LinearLayout content = column(); content.setPadding(dp(24), dp(22), dp(24), dp(26));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         full(shell, navigation());
@@ -63,10 +63,10 @@ public final class MainActivity extends Activity {
     private void heading(LinearLayout parent, String title, String subtitle, String icon, Runnable action) {
         LinearLayout row = row();
         LinearLayout titles = column();
-        full(titles, label(title, 27, MatteUi.TEXT, true)); gap(titles, 5);
+        full(titles, label(title, 25, MatteUi.TEXT, true)); gap(titles, 5);
         TextView sub = label(subtitle, 12, MatteUi.MUTED, false); full(titles, sub);
         row.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        FrameLayout button = new FrameLayout(this); MatteUi.card(button, 14);
+        FrameLayout button = new FrameLayout(this); MatteUi.card(button, 24);
         MatteUi.Icon glyph = new MatteUi.Icon(this, icon, MatteUi.TEXT);
         FrameLayout.LayoutParams glyphParams = new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER);
         button.addView(glyph, glyphParams); button.setOnClickListener(v -> action.run());
@@ -76,30 +76,18 @@ public final class MainActivity extends Activity {
     }
     private void home(LinearLayout parent) {
         heading(parent, getString(R.string.app_name), getString(R.string.ui_header_sub), "settings", () -> navigate(2));
-        FrameLayout hero = new FrameLayout(this); MatteUi.card(hero, 23); hero.setClipToOutline(true);
-        boolean largeText = getResources().getConfiguration().fontScale > 1.25f;
-        MatteUi.Hero artwork = new MatteUi.Hero(this); artwork.setAlpha(largeText ? .22f : 1f);
-        hero.addView(artwork, new FrameLayout.LayoutParams(-1, -1));
-        LinearLayout copy = column(); copy.setPadding(dp(21), dp(23), 0, dp(20));
-        TextView eyebrow = label(getString(R.string.ui_hero_badge), 10, 0xffc3b9df, true); eyebrow.setLetterSpacing(.12f); full(copy, eyebrow);
-        gap(copy, 21);
-        full(copy, label(getString(R.string.ui_hero_title), 31, MatteUi.TEXT, true)); gap(copy, 13);
-        TextView description = label(getString(R.string.ui_hero_sub), 12, 0xffbdc2d1, false); description.setLineSpacing(dp(3), 1); full(copy, description);
-        hero.addView(copy, new FrameLayout.LayoutParams(largeText ? -1 : (int) (getResources().getDisplayMetrics().widthPixels * .52f), -1));
-        parent.addView(hero, new LinearLayout.LayoutParams(-1, dp(224 * Math.max(1f, getResources().getConfiguration().fontScale)))); gap(parent, 17);
-
-        LinearLayout control = column(); control.setPadding(dp(18), dp(17), dp(18), dp(17)); MatteUi.card(control, 20);
+        LinearLayout control = column(); control.setPadding(dp(22), dp(23), dp(22), dp(21)); MatteUi.card(control, 19);
         LinearLayout stateRow = row();
         stateRow.addView(new MatteUi.Icon(this, "shield", MatteUi.TEAL), new LinearLayout.LayoutParams(dp(24), dp(24)));
         TextView title = label(getString(R.string.ui_protection), 16, MatteUi.TEXT, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1); titleParams.leftMargin = dp(10); stateRow.addView(title, titleParams);
         status = label("", 12, MatteUi.MUTED, false); status.setMaxWidth(dp(150)); status.setGravity(Gravity.END); stateRow.addView(status);
-        full(control, stateRow); gap(control, 12);
+        full(control, stateRow); gap(control, 18);
         protectionDetail = label("", 12, MatteUi.MUTED, false); protectionDetail.setLineSpacing(dp(3), 1); full(control, protectionDetail);
         gap(control, 12);
         toggle = MatteUi.button(this, getString(R.string.start), true); toggle.setOnClickListener(v -> toggleProtection()); full(control, toggle);
         gap(control, 11); selectionHint = label("", 11, MatteUi.MUTED, false); selectionHint.setGravity(Gravity.CENTER); full(control, selectionHint);
-        full(parent, control); gap(parent, 17);
+        full(parent, control); gap(parent, 20);
         LinearLayout stats = row();
         counters = statistic(stats, "—", getString(R.string.ui_requests), "shield", () -> showStats());
         ruleCount = statistic(stats, "—", getString(R.string.ui_domains), "list", () -> navigate(2));
@@ -115,8 +103,14 @@ public final class MainActivity extends Activity {
         privacy.setPadding(0, dp(12), 0, dp(12)); privacy.setOnClickListener(v -> info(R.string.ui_privacy_title, R.string.privacy)); full(parent, privacy);
     }
     private TextView statistic(LinearLayout row, String value, String caption, String icon, Runnable action) {
-        LinearLayout card = column(); card.setPadding(dp(16), dp(16), dp(16), dp(16)); MatteUi.card(card, 19);
-        TextView number = label(value, 27, MatteUi.TEXT, true); full(card, number); gap(card, 9);
+        LinearLayout card = column(); card.setPadding(dp(18), dp(20), dp(18), dp(20)); MatteUi.card(card, 18);
+        MatteUi.Icon glyph = new MatteUi.Icon(this, icon, MatteUi.PURPLE);
+        card.addView(glyph, new LinearLayout.LayoutParams(dp(22), dp(22))); gap(card, 16);
+        android.graphics.drawable.GradientDrawable tint = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                icon.equals("shield") ? new int[]{0xff4b3a72, 0xff36304f} : new int[]{0xff2d505d, 0xff30354f});
+        tint.setCornerRadius(dp(18)); tint.setStroke(dp(1), icon.equals("shield") ? 0xff715591 : 0xff456a75); card.setBackground(tint);
+        TextView number = label(value, 29, MatteUi.TEXT, true); full(card, number); gap(card, 9);
         full(card, label(caption, 11, MatteUi.MUTED, false));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
         if (row.getChildCount() == 0) params.rightMargin = dp(7); else params.leftMargin = dp(7);
@@ -142,7 +136,7 @@ public final class MainActivity extends Activity {
         gap(parent, 17); full(parent, label(getString(R.string.games_hint), 12, MatteUi.MUTED, false));
     }
     private void emptyGames(LinearLayout parent, boolean expanded) {
-        LinearLayout empty = column(); MatteUi.card(empty, 20); empty.setPadding(dp(20), dp(22), dp(20), dp(22)); empty.setGravity(Gravity.CENTER);
+        LinearLayout empty = column(); MatteUi.card(empty, 18); empty.setPadding(dp(20), dp(22), dp(20), dp(22)); empty.setGravity(Gravity.CENTER);
         MatteUi.Icon controller = new MatteUi.Icon(this, "games", MatteUi.PURPLE);
         empty.addView(controller, new LinearLayout.LayoutParams(dp(42), dp(42))); gap(empty, 13);
         TextView title = label(getString(selectedOnly && expanded ? R.string.ui_no_selected : R.string.ui_empty_title), 16, MatteUi.TEXT, true); title.setGravity(Gravity.CENTER); full(empty, title); gap(empty, 8);
@@ -163,7 +157,7 @@ public final class MainActivity extends Activity {
         }
     }
     private View gameCard(ApplicationInfo app, Set<String> selected) {
-        LinearLayout card = column(); card.setPadding(dp(15), dp(15), dp(15), dp(16)); MatteUi.card(card, 20);
+        LinearLayout card = column(); card.setPadding(dp(15), dp(15), dp(15), dp(16)); MatteUi.card(card, 18);
         LinearLayout top = row(); ImageView icon = new ImageView(this); icon.setImageDrawable(app.loadIcon(getPackageManager())); icon.setContentDescription(null);
         top.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
         top.addView(new Space(this), new LinearLayout.LayoutParams(0, 1, 1));
@@ -208,15 +202,18 @@ public final class MainActivity extends Activity {
     }
     private View navigation() {
         LinearLayout holder = column(); holder.setPadding(dp(15), dp(7), dp(15), dp(10));
-        LinearLayout bar = row(); MatteUi.card(bar, 24); bar.setPadding(dp(7), dp(9), dp(7), dp(9));
+        LinearLayout bar = row(); MatteUi.card(bar, 20); bar.setPadding(dp(7), dp(9), dp(7), dp(7));
         String[] icons = {"shield", "games", "settings"}; int[] titles = {R.string.ui_home, R.string.games_title, R.string.ui_settings};
         for (int i = 0; i < 3; i++) {
             final int destination = i; boolean active = tab == i;
             LinearLayout item = column(); item.setGravity(Gravity.CENTER); item.setPadding(0, dp(5), 0, dp(4));
-            if (active) item.setBackground(MatteUi.surface(this, true, 16));
-            item.addView(new MatteUi.Icon(this, icons[i], active ? MatteUi.TEXT : MatteUi.MUTED), new LinearLayout.LayoutParams(dp(23), dp(23))); gap(item, 5);
+            item.addView(new MatteUi.Icon(this, icons[i], active ? MatteUi.TEAL : MatteUi.MUTED), new LinearLayout.LayoutParams(dp(23), dp(23))); gap(item, 5);
             full(item, label(getString(titles[i]), 10, active ? MatteUi.TEXT : MatteUi.MUTED, active));
             ((TextView) item.getChildAt(2)).setGravity(Gravity.CENTER);
+            gap(item, 7);
+            View dot = new View(this); android.graphics.drawable.GradientDrawable dotBackground = new android.graphics.drawable.GradientDrawable();
+            dotBackground.setShape(android.graphics.drawable.GradientDrawable.OVAL); dotBackground.setColor(active ? MatteUi.TEAL : android.graphics.Color.TRANSPARENT);
+            dot.setBackground(dotBackground); item.addView(dot, new LinearLayout.LayoutParams(dp(5), dp(5)));
             item.setContentDescription(getString(titles[i])); item.setSelected(active); item.setFocusable(true); item.setOnClickListener(v -> navigate(destination));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1); params.leftMargin = dp(3); params.rightMargin = dp(3); bar.addView(item, params);
         }

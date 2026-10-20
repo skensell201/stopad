@@ -10,8 +10,8 @@ android {
         applicationId = "com.skensel.stopad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.6.0-dev"
+        versionCode = 8
+        versionName = "0.6.1"
     }
     signingConfigs {
         if (releaseKeyStore.isFile && releasePassword.isFile) {

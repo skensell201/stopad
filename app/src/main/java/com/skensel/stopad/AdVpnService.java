@@ -55,7 +55,7 @@ public final class AdVpnService extends VpnService {
             }
             DomainPolicy rules = new DomainPolicy(list.rules, BlocklistRepository.seed(this),
                     getSharedPreferences("games", MODE_PRIVATE).getStringSet("domain_exceptions", Collections.emptySet()));
-            Builder builder = new Builder().setSession("StopAd • игры")
+            Builder builder = new Builder().setSession("StopAD • игры")
                     .addAddress("10.111.0.1", 32).addDnsServer("10.111.0.2")
                     .addRoute("10.111.0.2", 32).allowFamily(OsConstants.AF_INET6)
                     .setMtu(1500).setBlocking(false).setUnderlyingNetworks(new Network[]{network})
@@ -84,7 +84,7 @@ public final class AdVpnService extends VpnService {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, AdVpnService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "protection").setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(running ? "StopAd • фильтрация DNS игр" : "StopAd • запуск защиты")
+                .setContentTitle(running ? "StopAD • фильтрация DNS игр" : "StopAD • запуск защиты")
                 .setContentText(running && !online() ? "Нет сети • ожидаем подключение" : "Браузеры исключены • нажмите, чтобы открыть")
                 .setContentIntent(open).setOngoing(true)
                 .addAction(new Notification.Action.Builder(null, "Остановить", stop).build()).build();
