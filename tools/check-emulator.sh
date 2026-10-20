@@ -3,10 +3,10 @@ set -eu
 cd "$(dirname "$0")/.."
 probe_serial=${1:-}
 probe_mode=${2:-}
-case "$probe_serial" in emulator-*) ;; *) echo 'Usage: tools/check-emulator.sh emulator-5554 [--ui|--ui-large|--lists|--network|--lifecycle] (isolated emulator only)' >&2; exit 2 ;; esac
-case "$probe_mode" in ''|--ui|--ui-large|--lists|--network|--lifecycle) ;; *) echo 'Unknown test mode' >&2; exit 2 ;; esac
+case "$probe_serial" in emulator-*) ;; *) echo 'Usage: tools/check-emulator.sh emulator-5554 [--ui|--ui-large|--locales|--lists|--network|--lifecycle] (isolated emulator only)' >&2; exit 2 ;; esac
+case "$probe_mode" in ''|--ui|--ui-large|--locales|--lists|--network|--lifecycle) ;; *) echo 'Unknown test mode' >&2; exit 2 ;; esac
 probe_ui=0
-case "$probe_mode" in --ui|--ui-large) probe_ui=1 ;; esac
+case "$probe_mode" in --ui|--ui-large|--locales) probe_ui=1 ;; esac
 probe_adb="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}/platform-tools/adb"
 "$probe_adb" -s "$probe_serial" get-state
 # One runner avoids Android silently retaining only the last instrumentation for a target.
@@ -62,6 +62,7 @@ if [ "$probe_ui" = 0 ]; then
 fi
 probe_test_started=1
 case "$probe_mode" in
+    --locales) set -- -e localizationTests true ;;
     --ui) set -- -e uiTests true ;;
     --ui-large) set -- -e uiTests true -e largeFonts true ;;
     --lists) set -- -e listTests true ;;

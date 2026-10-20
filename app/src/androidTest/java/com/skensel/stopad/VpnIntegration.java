@@ -14,9 +14,9 @@ import java.util.concurrent.*;
 /** Run only with the isolated emulator probes installed. No production backdoor or exported test API. */
 public final class VpnIntegration extends Instrumentation {
     private Context context;
-    private boolean networkTests, listTests, uiTests, lifecycleTests, largeFontTests;
+    private boolean localizationTests, networkTests, listTests, uiTests, lifecycleTests, largeFontTests;
     private final String game = "com.skensel.stopad.probe.game", browser = "com.skensel.stopad.probe.browser", manualGame = "com.skensel.stopad.probe.manual";
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); largeFontTests=arguments!=null && "true".equals(arguments.getString("largeFonts")); lifecycleTests = arguments != null && "true".equals(arguments.getString("lifecycleTests")); uiTests = arguments != null && "true".equals(arguments.getString("uiTests")); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
+    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); localizationTests=arguments!=null && "true".equals(arguments.getString("localizationTests")); largeFontTests=arguments!=null && "true".equals(arguments.getString("largeFonts")); lifecycleTests = arguments != null && "true".equals(arguments.getString("lifecycleTests")); uiTests = arguments != null && "true".equals(arguments.getString("uiTests")); listTests = arguments != null && "true".equals(arguments.getString("listTests")); networkTests = arguments != null && "true".equals(arguments.getString("networkTests")); start(); }
     @Override public void callActivityOnCreate(Activity activity, Bundle state) {
         if (uiTests) {
             activity.setTurnScreenOn(true); activity.setShowWhenLocked(true);
@@ -25,6 +25,7 @@ public final class VpnIntegration extends Instrumentation {
         super.callActivityOnCreate(activity, state);
     }
     @Override public void onStart() {
+        if (localizationTests) { LocalizationIntegration.run(this); return; }
         if (uiTests) { new UiIntegration(this).run(largeFontTests); return; }
         if (listTests) { new ListIntegration(this).run(); return; }
         Bundle result = new Bundle();

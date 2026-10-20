@@ -52,8 +52,8 @@ final class UiIntegration {
                 });
             }
             capture("games");
-            click(activity, "Настройки"); capture("settings");
-            click(activity, "Главная"); capture("home");
+            click(activity, activity.getString(R.string.ui_settings)); capture("settings");
+            click(activity, activity.getString(R.string.ui_home)); capture("home");
             if (AdVpnService.active()) throw new AssertionError("Navigation must not start VPN");
             result.putString("stream", "PASS: home, games, settings navigation and empty-selection action; VPN remains off; screenshots saved"+(largeFonts?"; 160% text without clipping":"")+"\n");
             ok = true;

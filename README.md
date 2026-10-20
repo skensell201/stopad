@@ -10,7 +10,7 @@ Android DNS filtering for selected games, using a local VPN. Browsers are exclud
 2. Download `StopAD-<version>.apk` from **Assets** and open it. Allow installation from that source if Android asks.
 3. Select your games, start protection, and accept the Android VPN prompt.
 
-See the [illustrated guide](docs/USER_GUIDE.md) for setup, controls, updates, and troubleshooting. The current app interface is in Russian; the guide provides English translations of the controls.
+See the [illustrated guide](docs/USER_GUIDE.md) for setup, controls, updates, and troubleshooting. The app supports English and Russian. It follows your Android language; Android 13+ also supports a per-app language choice in system settings.
 
 <img src="docs/images/home.png" alt="StopAD Home screen with protection off" width="320">
 

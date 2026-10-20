@@ -239,7 +239,7 @@ public final class MainActivity extends Activity {
         try { startActivity(new Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)); }
         catch (ActivityNotFoundException e) { startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)); }
     }
-    private String number(long value) { return java.text.NumberFormat.getIntegerInstance(new Locale("ru")).format(value); }
+    private String number(long value) { return java.text.NumberFormat.getIntegerInstance(getResources().getConfiguration().getLocales().get(0)).format(value); }
     private void showStats() {
         new AlertDialog.Builder(this).setTitle(R.string.ui_session_title)
                 .setMessage(AdVpnService.active() ? getString(R.string.stats, AdVpnService.blocked(), AdVpnService.forwarded(), AdVpnService.failed()) : getString(R.string.session_empty))
@@ -275,7 +275,7 @@ public final class MainActivity extends Activity {
         }
         if (listStatus != null) {
             String detail = snapshot == null ? getString(R.string.list_loading) : getString(R.string.ui_list_detail,
-                    number(snapshot.domains.size()), snapshot.sha256.substring(0, 12), java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, new Locale("ru")).format(new Date(snapshot.fetchedAt)));
+                    number(snapshot.domains.size()), snapshot.sha256.substring(0, 12), java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, getResources().getConfiguration().getLocales().get(0)).format(new Date(snapshot.fetchedAt)));
             if (BlocklistRepository.busy && snapshot != null) detail += "\n\n" + getString(R.string.list_updating);
             else if (!BlocklistRepository.message.isEmpty()) detail += "\n\n" + BlocklistRepository.message;
             AdVpnService.Session session = AdVpnService.current;

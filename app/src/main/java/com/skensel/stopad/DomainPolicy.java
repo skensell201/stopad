@@ -20,15 +20,15 @@ final class DomainPolicy {
     }
     static Set<String> parseExceptions(String text) {
         Set<String> domains = new TreeSet<>();
-        if (text.length() > 65536) throw new IllegalArgumentException("Слишком длинный список");
+        if (text.length() > 65536) throw new IllegalArgumentException("Exception list is too long");
         for (String raw : text.split("\\R")) {
             raw = raw.trim(); if (raw.isEmpty()) continue;
             if (raw.endsWith(".")) raw = raw.substring(0, raw.length() - 1);
             String name = IDN.toASCII(raw, IDN.USE_STD3_ASCII_RULES).toLowerCase(Locale.ROOT);
             if (name.length() > 253 || !name.contains(".") || name.matches("[0-9.]+"))
-                throw new IllegalArgumentException("Нужен домен, например ads.example.com");
+                throw new IllegalArgumentException("A domain is required, for example ads.example.com");
             domains.add(name);
-            if (domains.size() > 256) throw new IllegalArgumentException("Максимум 256 доменов");
+            if (domains.size() > 256) throw new IllegalArgumentException("Maximum 256 domains");
         }
         return domains;
     }

@@ -31,13 +31,14 @@ Run Android checks only on an isolated emulator, with any existing StopAD VPN st
 
 ```sh
 tools/check-emulator.sh emulator-5554 --ui
+tools/check-emulator.sh emulator-5554 --locales
 tools/check-emulator.sh emulator-5554 --ui-large
 tools/check-emulator.sh emulator-5554 --network
 tools/check-emulator.sh emulator-5554 --lists
 tools/check-emulator.sh emulator-5554 --lifecycle
 ```
 
-UI checks cover navigation and empty-selection handling; `--ui-large` uses 160% text and restores the scale. Other modes install test probes and temporarily grant VPN consent in the emulator. Network checks temporarily change Wi-Fi and Private DNS settings; list tests include a real HTTPS download. The runner restores settings and removes test packages it added. Android probes require API 29+; the app itself supports API 26+.
+`--locales` checks English/Russian resources, formatted counters, and English fallback for unsupported languages. UI checks cover navigation and empty-selection handling; `--ui-large` uses 160% text and restores the scale. Other modes install test probes and temporarily grant VPN consent in the emulator. Network checks temporarily change Wi-Fi and Private DNS settings; list tests include a real HTTPS download. The runner restores settings and removes test packages it added. Android probes require API 29+; the app itself supports API 26+.
 
 These checks do not prove compatibility with every game, manufacturer battery policy, or prolonged Doze state.
 
@@ -61,7 +62,7 @@ The script verifies the APK signature against the pinned public certificate and 
 | Path | Purpose |
 | --- | --- |
 | `app/src/main/java/` | Native Android UI, per-game VPN, DNS and list logic |
-| `app/src/main/res/` | UI strings, theme and icons; current UI language is Russian |
+| `app/src/main/res/` | UI strings, theme and icons; English default resources and Russian translations |
 | `app/src/main/assets/` | Bundled blocklist, integrity metadata and third-party notices |
 | `app/src/androidTest/` | Android instrumentation checks |
 | `tools/` | Core checks, release scripts and isolated test probes |

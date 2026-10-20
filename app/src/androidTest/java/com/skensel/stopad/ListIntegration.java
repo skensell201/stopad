@@ -34,7 +34,7 @@ final class ListIntegration {
             require(original != null && original.domains.size() > 100000, "Bundled list ready");
             long before = SystemClock.elapsedRealtime();
             BlocklistRepository.update(context); awaitIdle();
-            require(BlocklistRepository.message.contains("актуален") || BlocklistRepository.message.contains("обновлён"), "Fixed HTTPS source: " + BlocklistRepository.message);
+            require(BlocklistRepository.message.equals(context.getString(R.string.list_current)) || BlocklistRepository.message.equals(context.getString(R.string.list_updated)), "Fixed HTTPS source: " + BlocklistRepository.message);
             BlocklistSnapshot good = BlocklistRepository.snapshot;
             require(new BlocklistStore(context.getNoBackupFilesDir().toPath()).load().sha256.equals(good.sha256), "Persisted downloaded snapshot");
             byte[] goodCache = read(target);
@@ -44,7 +44,7 @@ final class ListIntegration {
                     () -> fixture(600)}) {
                 BlocklistRepository.update(context, failure); awaitIdle();
                 require(BlocklistRepository.snapshot == good && Arrays.equals(goodCache, read(target)), "Previous list retained after rejected update");
-                require(BlocklistRepository.message.contains("не удалось"), "Failure visible to UI");
+                require(BlocklistRepository.message.equals(context.getString(R.string.list_update_failed)), "Failure visible to UI");
             }
             Files.write(target, new byte[]{1, 2, 3});
             Properties metadata = new Properties();

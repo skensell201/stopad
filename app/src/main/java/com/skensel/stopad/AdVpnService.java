@@ -40,29 +40,29 @@ public final class AdVpnService extends VpnService {
         try {
             startForeground(1, notification(false));
             Set<String> games = GameCatalog.selected(this);
-            if (games.isEmpty()) throw new IOException("Сначала выберите хотя бы одну установленную игру");
-            if (VpnService.prepare(this) != null) throw new IOException("Нужно разрешение Android на VPN");
+            if (games.isEmpty()) throw new IOException(getString(R.string.vpn_no_games));
+            if (VpnService.prepare(this) != null) throw new IOException(getString(R.string.vpn_permission_required));
             var cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
             Network network = cm.getActiveNetwork();
-            if (network == null) throw new IOException("Нет подключения к сети");
+            if (network == null) throw new IOException(getString(R.string.vpn_no_network));
             var link = cm.getLinkProperties(network);
             if (Build.VERSION.SDK_INT >= 28 && link != null && link.isPrivateDnsActive())
-                throw new IOException("Для DNS-прототипа выключите Private DNS в настройках Android");
+                throw new IOException(getString(R.string.vpn_private_dns));
             BlocklistSnapshot list = BlocklistRepository.snapshot;
             if (list == null) {
                 BlocklistRepository.initialize(this);
-                throw new IOException("Список блокировки загружается. Повторите включение через несколько секунд");
+                throw new IOException(getString(R.string.vpn_list_loading));
             }
             DomainPolicy rules = new DomainPolicy(list.rules, BlocklistRepository.seed(this),
                     getSharedPreferences("games", MODE_PRIVATE).getStringSet("domain_exceptions", Collections.emptySet()));
-            Builder builder = new Builder().setSession("StopAD • игры")
+            Builder builder = new Builder().setSession(getString(R.string.vpn_session))
                     .addAddress("10.111.0.1", 32).addDnsServer("10.111.0.2")
                     .addRoute("10.111.0.2", 32).allowFamily(OsConstants.AF_INET6)
                     .setMtu(1500).setBlocking(false).setUnderlyingNetworks(new Network[]{network})
                     .setConfigureIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE));
             for (String game : games) builder.addAllowedApplication(game);
             ParcelFileDescriptor tunnel = builder.establish();
-            if (tunnel == null) throw new IOException("Android не создал VPN-интерфейс");
+            if (tunnel == null) throw new IOException(getString(R.string.vpn_establish_failed));
             Session session;
             try { session = new Session(tunnel, rules, network, list.sha256, this); }
             catch (IOException e) { tunnel.close(); throw e; }
@@ -72,7 +72,7 @@ public final class AdVpnService extends VpnService {
             getSystemService(NotificationManager.class).notify(1, notification(true));
             new Thread(() -> pump(session), "stopad-dns").start();
         } catch (Exception e) {
-            stopSession(e.getMessage() == null ? "Не удалось запустить VPN" : e.getMessage());
+            stopSession(e.getMessage() == null ? getString(R.string.start_failed) : e.getMessage());
             stopSelf();
         }
         return START_NOT_STICKY;
@@ -80,14 +80,14 @@ public final class AdVpnService extends VpnService {
 
     private Notification notification(boolean running) {
         NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.createNotificationChannel(new NotificationChannel("protection", "Защита игр", NotificationManager.IMPORTANCE_LOW));
+        manager.createNotificationChannel(new NotificationChannel("protection", getString(R.string.ui_protection), NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, AdVpnService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "protection").setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(running ? "StopAD • фильтрация DNS игр" : "StopAD • запуск защиты")
-                .setContentText(running && !online() ? "Нет сети • ожидаем подключение" : "Браузеры исключены • нажмите, чтобы открыть")
+                .setContentTitle(running ? getString(R.string.vpn_notification_running) : getString(R.string.vpn_notification_starting))
+                .setContentText(running && !online() ? getString(R.string.waiting_network) : getString(R.string.vpn_notification_body))
                 .setContentIntent(open).setOngoing(true)
-                .addAction(new Notification.Action.Builder(null, "Остановить", stop).build()).build();
+                .addAction(new Notification.Action.Builder(null, getString(R.string.vpn_notification_stop), stop).build()).build();
     }
 
     private void pump(Session s) {
@@ -101,7 +101,7 @@ public final class AdVpnService extends VpnService {
                 if (s.closed.get()) break;
                 if (ready == 0) continue;
                 if ((poll.revents & (OsConstants.POLLERR | OsConstants.POLLHUP | OsConstants.POLLNVAL)) != 0)
-                    throw new IOException("VPN-интерфейс закрыт");
+                    throw new IOException(getString(R.string.vpn_interface_closed));
                 if ((poll.revents & OsConstants.POLLIN) == 0) continue;
                 int n = s.input.read(buffer);
                 if (n < 0) throw new EOFException();
@@ -120,7 +120,7 @@ public final class AdVpnService extends VpnService {
             }
         } catch (Exception e) {
             if (!s.closed.get()) main.post(() -> {
-                if (current == s) { stopSession("VPN остановлен из-за ошибки интерфейса"); stopSelf(); }
+                if (current == s) { stopSession(getString(R.string.vpn_interface_error)); stopSelf(); }
             });
         }
     }
@@ -150,7 +150,7 @@ public final class AdVpnService extends VpnService {
                 }
                 LinkProperties link = preferred == null ? null : cm.getLinkProperties(preferred);
                 if (Build.VERSION.SDK_INT >= 28 && link != null && link.isPrivateDnsActive()) {
-                    stopSession("Private DNS включён. Выключите его и запустите защиту снова"); stopSelf(); return;
+                    stopSession(getString(R.string.vpn_private_dns_enabled)); stopSelf(); return;
                 }
                 s.switchNetwork(preferred);
                 setUnderlyingNetworks(preferred == null ? new Network[0] : new Network[]{preferred});
@@ -215,7 +215,7 @@ public final class AdVpnService extends VpnService {
             if(tcpReply==null) s.send(packet.reply(response)); else tcpReply.accept(response);
         } catch (IOException | UncheckedIOException e) {
             if (!s.closed.get()) main.post(() -> {
-                if (current == s) { stopSession("Не удалось вернуть ответ DNS"); stopSelf(); }
+                if (current == s) { stopSession(getString(R.string.vpn_reply_failed)); stopSelf(); }
             });
         }
     }
@@ -231,7 +231,7 @@ public final class AdVpnService extends VpnService {
         if (s != null) s.close();
         stopForeground(STOP_FOREGROUND_REMOVE);
     }
-    @Override public void onRevoke() { main.post(() -> { stopSession("Разрешение VPN отозвано"); stopSelf(); }); }
+    @Override public void onRevoke() { main.post(() -> { stopSession(getString(R.string.vpn_revoked)); stopSelf(); }); }
     @Override public void onDestroy() { stopSession(message); super.onDestroy(); }
 
     static final class Session {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2
+
+- Added English and Russian interfaces, including VPN notifications, startup errors and blocklist update messages.
+- Follow the Android language, with English fallback for other languages.
+- Added Android 13+ per-app language support through system settings.
+- Format numbers and dates using the active interface locale.
+- Added Android localization checks and updated the illustrated guide with English screenshots.
+
 ## 0.6.1
 
 First public GitHub release.

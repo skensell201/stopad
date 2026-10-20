@@ -28,7 +28,7 @@ final class BlocklistRepository {
                 try { store(app).cleanupStaging(); } catch (IOException ignored) { }
                 snapshot = load(app);
             }
-            catch (IOException e) { message = "Не удалось прочитать список блокировки"; }
+            catch (IOException e) { message = app.getString(R.string.list_read_failed); }
             finally { busy = false; }
         });
     }
@@ -47,8 +47,8 @@ final class BlocklistRepository {
                 if (next.domains.size() < previous.domains.size() / 2) throw new IOException("Unexpected list shrink");
                 store(app).install(next);
                 snapshot = next;
-                message = previous.sha256.equals(next.sha256) ? "Список уже актуален" : "Список обновлён. Применится при следующем включении защиты";
-            } catch (IOException e) { message = "Обновление не удалось. Прежний список сохранён"; }
+                message = previous.sha256.equals(next.sha256) ? app.getString(R.string.list_current) : app.getString(R.string.list_updated);
+            } catch (IOException e) { message = app.getString(R.string.list_update_failed); }
             finally { busy = false; }
         });
     }
